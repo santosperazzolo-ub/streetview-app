@@ -5,7 +5,6 @@ import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
 import exifr from "exifr";
-import { createCanvas, loadImage } from "canvas";
 import jwt from "jsonwebtoken";
 import db from "./db.js";
 import { extractFramesFromVideo } from "./frameExtractor.js";
