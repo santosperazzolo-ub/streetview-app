@@ -59,19 +59,22 @@ export async function extractFramesFromVideo(videoPath, gpsPoints, projectId) {
 
       // Calcular FPS para extraer N frames
       // Usamos fps=1 para extraer 1 frame por segundo, luego seleccionamos los que necesitamos
-      const cmd = [
-        'ffmpeg',
-        '-i', videoPath,
-        '-vf', 'fps=1',
-        path.join(outputDir, 'frame_%04d.jpg'),
-        '-y'
-      ];
+      const cmd = `ffmpeg -i "${videoPath}" -vf fps=1 "${path.join(outputDir, 'frame_%04d.jpg')}" -y`;
 
       console.log(`⏳ Procesando con FFmpeg...`);
-      execSync(cmd.join(' '), {
-        stdio: 'pipe',
-        shell: '/bin/bash'
-      });
+      console.log(`Ejecutando: ${cmd}`);
+
+      try {
+        execSync(cmd, {
+          encoding: 'utf-8',
+          stdio: ['pipe', 'pipe', 'pipe']
+        });
+      } catch (execError) {
+        console.error('Error ejecutando FFmpeg:', execError.message);
+        if (execError.stdout) console.error('STDOUT:', execError.stdout);
+        if (execError.stderr) console.error('STDERR:', execError.stderr);
+        throw execError;
+      }
 
       // Verificar frames extraídos
       let files = fs.readdirSync(outputDir).filter(f => f.endsWith('.jpg')).sort();
