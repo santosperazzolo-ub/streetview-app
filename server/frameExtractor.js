@@ -5,6 +5,36 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+// Filtrar puntos GPS por distancia mínima (3 metros)
+function filterPointsByDistance(points, minDistance = 3) {
+  if (!points || points.length === 0) return [];
+
+  const filtered = [points[0]];
+
+  for (let i = 1; i < points.length; i++) {
+    const lastPoint = filtered[filtered.length - 1];
+    const currentPoint = points[i];
+
+    // Haversine formula para calcular distancia entre coordenadas
+    const R = 6371000; // Radio de la Tierra en metros
+    const lat1 = (lastPoint.lat * Math.PI) / 180;
+    const lat2 = (currentPoint.lat * Math.PI) / 180;
+    const dLat = ((currentPoint.lat - lastPoint.lat) * Math.PI) / 180;
+    const dLon = ((currentPoint.lon - lastPoint.lon) * Math.PI) / 180;
+
+    const a = Math.sin(dLat / 2) ** 2 +
+              Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+    const c = 2 * Math.asin(Math.sqrt(a));
+    const distance = R * c; // Distancia en metros
+
+    if (distance >= minDistance) {
+      filtered.push(currentPoint);
+    }
+  }
+
+  return filtered;
+}
+
 // Extraer frames del video y asociarlos con puntos GPS
 export async function extractFramesFromVideo(videoPath, gpsPoints, projectId) {
   return new Promise((resolve, reject) => {
@@ -15,7 +45,9 @@ export async function extractFramesFromVideo(videoPath, gpsPoints, projectId) {
       return reject(new Error('Sin puntos GPS'));
     }
 
-    console.log(`🎬 Extrayendo ${gpsPoints.length} frames del video con FFmpeg...`);
+    // Filtrar puntos GPS por distancia de 3 metros
+    const filteredGpsPoints = filterPointsByDistance(gpsPoints, 3);
+    console.log(`📍 Puntos GPS filtrados: ${filteredGpsPoints.length} de ${gpsPoints.length} (distancia mínima 3m)`);
 
     try {
       // Limpiar frames anteriores
@@ -46,12 +78,18 @@ export async function extractFramesFromVideo(videoPath, gpsPoints, projectId) {
 
       console.log(`📹 Se extrajeron ${files.length} frames totales`);
 
-      // Si tenemos más frames de los que necesitamos, seleccionar uniformemente
+      // Asociar frames con puntos GPS filtrados uniformemente
       const frames = [];
-      const step = Math.max(1, Math.floor(files.length / gpsPoints.length));
+      const numGpsPoints = filteredGpsPoints.length;
 
-      for (let i = 0; i < gpsPoints.length && i * step < files.length; i++) {
-        const gpsPoint = gpsPoints[i];
+      if (numGpsPoints === 0) {
+        return reject(new Error('Sin puntos GPS después de filtrar por distancia'));
+      }
+
+      const step = Math.max(1, Math.floor(files.length / numGpsPoints));
+
+      for (let i = 0; i < numGpsPoints && i * step < files.length; i++) {
+        const gpsPoint = filteredGpsPoints[i];
         const fileIndex = i * step;
         const frameFile = files[fileIndex];
         const framePath = path.join(outputDir, frameFile);
@@ -67,7 +105,7 @@ export async function extractFramesFromVideo(videoPath, gpsPoints, projectId) {
         }
       }
 
-      console.log(`✓ ${frames.length} frames seleccionados y asociados con GPS`);
+      console.log(`✓ ${frames.length} frames asociados con puntos GPS filtrados (3m distancia mínima)`);
       resolve(frames);
     } catch (e) {
       console.error('Error FFmpeg:', e.message);
