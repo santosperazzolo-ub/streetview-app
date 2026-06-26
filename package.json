@@ -1,0 +1,22 @@
+{
+  "name": "streetview-app",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "server/index.js",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "multer": "^1.4.5-lts.1",
+    "jsonwebtoken": "^9.1.2",
+    "canvas": "^2.11.2",
+    "better-sqlite3": "^9.2.2",
+    "exifr": "^7.1.3"
+  }
+}

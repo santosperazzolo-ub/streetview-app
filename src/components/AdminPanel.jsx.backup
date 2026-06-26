@@ -1,0 +1,898 @@
+import { useState, useEffect } from "react";
+
+export default function AdminPanel({ token }) {
+  const API_URL = window.location.hostname === 'localhost'
+    ? '${API_URL}'
+    : 'https://immodest-linguini-habitual.ngrok-free.dev';
+  const API_URL = window.location.hostname === 'localhost'
+    ? '${API_URL}'
+    : 'https://immodest-linguini-habitual.ngrok-free.dev';
+
+  const [projects, setProjects] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [newProjectName, setNewProjectName] = useState("");
+  const [selectedUsers, setSelectedUsers] = useState({});
+  const [selectedProject, setSelectedProject] = useState(null);
+  const [gpsFile, setGpsFile] = useState({});
+  const [videoFile, setVideoFile] = useState({});
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
+  const [savedUsers, setSavedUsers] = useState({});
+  const [projectInfo, setProjectInfo] = useState({});
+
+  useEffect(() => {
+    fetchProjects();
+    fetchUsers();
+  }, []);
+
+  useEffect(() => {
+    if (selectedProject?.id) {
+      loadProjectData();
+      // Guardar en localStorage
+      localStorage.setItem('selectedProjectId', selectedProject.id);
+    }
+  }, [selectedProject?.id, token]);
+
+  // Recuperar proyecto guardado después de cargar proyectos
+  useEffect(() => {
+    if (projects.length > 0 && !selectedProject) {
+      const savedProjectId = localStorage.getItem('selectedProjectId');
+      if (savedProjectId) {
+        const proj = projects.find(p => p.id === parseInt(savedProjectId));
+        if (proj) {
+          console.log(`✅ Restaurando proyecto #${proj.id}: ${proj.name}`);
+          setSelectedProject(proj);
+        }
+      }
+    }
+  }, [projects]);
+
+  const fetchUsers = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/users", {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json();
+      setUsers(data);
+    } catch (e) {
+      console.error("Error cargando usuarios:", e);
+    }
+  };
+
+  const loadProjectData = async () => {
+    if (!selectedProject?.id) return;
+
+    try {
+      const id = selectedProject.id;
+
+      // Cargar GPS
+      const API_URL = window.location.hostname === 'localhost' ? '${API_URL}' : 'https://immodest-linguini-habitual.ngrok-free.dev';
+      const gpsRes = await fetch(`${API_URL}/api/projects/${id}/gps`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const gpsPoints = await gpsRes.json() || [];
+
+      // Cargar video
+      const videoRes = await fetch(`${API_URL}/api/projects/${id}/video`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const videoInfo = await videoRes.json() || {};
+
+      // Cargar usuarios
+      const usersRes = await fetch(`${API_URL}/api/projects/${id}/users`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const userIds = await usersRes.json() || [];
+
+      // Guardar TODOS los datos
+      setProjectInfo(prev => ({
+        ...prev,
+        [id]: {
+          gpsCount: Array.isArray(gpsPoints) ? gpsPoints.length : 0,
+          hasVideo: !!videoInfo?.videoPath,
+          videoPath: videoInfo?.videoPath
+        }
+      }));
+
+      setSelectedUsers(prev => ({
+        ...prev,
+        [id]: userIds
+      }));
+
+      setSavedUsers(prev => ({
+        ...prev,
+        [id]: userIds
+      }));
+
+      console.log(`✅ Datos cargados para proyecto ${id}:`, {
+        gps: Array.isArray(gpsPoints) ? gpsPoints.length : 0,
+        video: !!videoInfo?.videoPath,
+        users: userIds
+      });
+    } catch (e) {
+      console.error("Error cargando datos del proyecto:", e);
+    }
+  };
+
+  const fetchProjects = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/projects", {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await res.json();
+      setProjects(data);
+    } catch (e) {
+      setMessage("Error cargando proyectos");
+    }
+  };
+
+  const createProject = async () => {
+    if (!newProjectName.trim()) {
+      setMessage("⚠️ Ingresa un nombre para el proyecto");
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/api/projects", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          name: newProjectName,
+          userIds: []
+        })
+      });
+      const data = await res.json();
+      setProjects([...projects, data]);
+      setNewProjectName("");
+      setMessage("✓ Proyecto creado. Ahora asigna usuarios editándolo");
+    } catch (e) {
+      setMessage("❌ Error creando proyecto: " + e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const uploadGPS = async () => {
+    if (!selectedProject || !gpsFile[selectedProject.id]) {
+      setMessage("❌ Selecciona un archivo GPS");
+      return;
+    }
+
+    const projectId = selectedProject.id;
+    const projectName = selectedProject.name;
+
+    setLoading(true);
+    setMessage(`📥 Cargando GPS para "${projectName}"...`);
+
+    try {
+      const currentGpsFile = gpsFile[projectId];
+      const gpsData = JSON.parse(await currentGpsFile.text());
+
+      console.log(`📍 Enviando ${gpsData.length} puntos GPS al proyecto ${projectId} (${projectName})`);
+
+      const res = await fetch(`${API_URL}/api/projects/${projectId}/gps`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify(gpsData)
+      });
+
+      if (!res.ok) throw new Error("Error al cargar GPS");
+
+      const data = await res.json();
+      setGpsFile(prev => {
+        const newState = { ...prev };
+        delete newState[projectId];
+        return newState;
+      });
+      setMessage(`✓ ${data.count} puntos GPS cargados en "${projectName}"`);
+    } catch (e) {
+      setMessage("❌ Error: " + e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const uploadVideo = async () => {
+    if (!selectedProject || !videoFile[selectedProject.id]) {
+      setMessage("❌ Selecciona un archivo de video");
+      return;
+    }
+
+    const projectId = selectedProject.id;
+    const projectName = selectedProject.name;
+
+    setLoading(true);
+    setMessage(`📤 Cargando video para "${projectName}"...`);
+
+    try {
+      const currentVideoFile = videoFile[projectId];
+      const formData = new FormData();
+      formData.append("video", currentVideoFile);
+
+      console.log(`🎥 Enviando video al proyecto ${projectId} (${projectName})`);
+
+      const res = await fetch(`${API_URL}/api/projects/${projectId}/video`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData
+      });
+
+      if (!res.ok) throw new Error("Error al cargar video");
+
+      const data = await res.json();
+      setVideoFile(prev => {
+        const newState = { ...prev };
+        delete newState[projectId];
+        return newState;
+      });
+
+      if (data.framesExtracted > 0) {
+        setMessage(`✓ Video cargado y ${data.framesExtracted} frames extraídos en "${projectName}"`);
+      } else if (data.message) {
+        setMessage(`✓ Video cargado en "${projectName}" (${data.message})`);
+      } else {
+        setMessage(`✓ Video cargado en "${projectName}"`);
+      }
+    } catch (e) {
+      setMessage("❌ Error: " + e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div style={{
+      paddingTop: "70px",
+      paddingBottom: "30px",
+      paddingLeft: "30px",
+      paddingRight: "30px",
+      maxWidth: "1200px",
+      margin: "0 auto",
+      background: "#f5f7fa",
+      width: "100%",
+      boxSizing: "border-box",
+      minHeight: "100vh"
+    }}>
+      <h1 style={{
+        fontSize: "32px",
+        fontWeight: "700",
+        margin: "0 0 10px 0",
+        background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+        WebkitBackgroundClip: "text",
+        WebkitTextFillColor: "transparent",
+        backgroundClip: "text"
+      }}>
+        📋 Panel de Administración
+      </h1>
+      <p style={{ color: "#999", margin: "0 0 30px 0", fontSize: "15px" }}>
+        Gestiona proyectos, usuarios y contenido multimedia
+      </p>
+
+      {message && (
+        <div style={{
+          background: message.includes("✓") ? "linear-gradient(135deg, #4CAF50 0%, #45a049 100%)" : "linear-gradient(135deg, #f44336 0%, #da190b 100%)",
+          color: "white",
+          padding: "15px 20px",
+          borderRadius: "8px",
+          marginBottom: "20px",
+          fontWeight: "600",
+          boxShadow: message.includes("✓")
+            ? "0 4px 12px rgba(76, 175, 80, 0.3)"
+            : "0 4px 12px rgba(244, 67, 54, 0.3)",
+          display: "flex",
+          alignItems: "center",
+          gap: "10px"
+        }}>
+          <span>{message}</span>
+        </div>
+      )}
+
+      {/* Crear proyecto */}
+      <div style={{
+        background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+        padding: "30px",
+        borderRadius: "12px",
+        marginBottom: "20px",
+        boxShadow: "0 8px 32px rgba(102, 126, 234, 0.2)"
+      }}>
+        <h2 style={{ margin: "0 0 25px 0", color: "white", fontSize: "24px", fontWeight: "600" }}>
+          ✨ Crear Proyecto
+        </h2>
+        <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
+          <div>
+            <label style={{ display: "block", marginBottom: "8px", fontWeight: "600", color: "white", fontSize: "14px" }}>
+              Nombre del proyecto
+            </label>
+            <input
+              type="text"
+              placeholder="Ej: Ruta Principal, Zona A..."
+              value={newProjectName}
+              onChange={(e) => setNewProjectName(e.target.value)}
+              style={{
+                width: "100%",
+                padding: "12px",
+                border: "none",
+                borderRadius: "8px",
+                fontSize: "14px",
+                boxSizing: "border-box",
+                background: "rgba(255,255,255,0.95)"
+              }}
+            />
+          </div>
+
+          <button
+            onClick={createProject}
+            disabled={loading || !newProjectName.trim()}
+            style={{
+              padding: "14px 20px",
+              background: !newProjectName.trim() ? "#999" : "#4CAF50",
+              color: "white",
+              border: "none",
+              borderRadius: "8px",
+              cursor: (loading || !newProjectName.trim()) ? "not-allowed" : "pointer",
+              fontWeight: "600",
+              fontSize: "15px",
+              transition: "all 0.3s ease",
+              opacity: (loading || !newProjectName.trim()) ? 0.7 : 1
+            }}
+          >
+            {loading ? "⏳ Creando..." : "✨ Crear Proyecto"}
+          </button>
+        </div>
+      </div>
+
+      {/* Lista de proyectos */}
+      {projects.length > 0 && (
+        <div style={{ marginTop: "20px" }}>
+          <h2 style={{ fontSize: "22px", fontWeight: "600", marginBottom: "15px", color: "#333" }}>
+            📂 Mis Proyectos
+          </h2>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "12px" }}>
+            {projects.map((proj) => (
+              <div
+                key={proj.id}
+                style={{
+                  background: selectedProject?.id === proj.id
+                    ? "linear-gradient(135deg, #667eea 0%, #764ba2 100%)"
+                    : "white",
+                  border: selectedProject?.id === proj.id ? "none" : "1px solid #e0e0e0",
+                  padding: "18px",
+                  borderRadius: "10px",
+                  boxShadow: selectedProject?.id === proj.id
+                    ? "0 8px 24px rgba(102, 126, 234, 0.3)"
+                    : "0 2px 8px rgba(0,0,0,0.08)",
+                  cursor: "pointer",
+                  transition: "all 0.3s ease",
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "space-between"
+                }}
+                onMouseEnter={(e) => {
+                  if (selectedProject?.id !== proj.id) {
+                    e.currentTarget.style.boxShadow = "0 4px 12px rgba(0,0,0,0.12)";
+                    e.currentTarget.style.transform = "translateY(-2px)";
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (selectedProject?.id !== proj.id) {
+                    e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,0,0,0.08)";
+                    e.currentTarget.style.transform = "translateY(0)";
+                  }
+                }}
+              >
+                <div style={{ flex: 1 }} onClick={() => setSelectedProject(proj)}>
+                  <h3 style={{
+                    margin: "0 0 10px 0",
+                    fontSize: "18px",
+                    fontWeight: "600",
+                    color: selectedProject?.id === proj.id ? "white" : "#333"
+                  }}>
+                    {proj.name}
+                  </h3>
+                  <p style={{
+                    color: selectedProject?.id === proj.id ? "rgba(255,255,255,0.8)" : "#999",
+                    fontSize: "12px",
+                    margin: 0
+                  }}>
+                    ID: {proj.id} • {new Date(proj.createdAt).toLocaleDateString("es-ES")}
+                  </p>
+                </div>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedProject(proj);
+                  }}
+                  style={{
+                    marginTop: "12px",
+                    padding: "8px 16px",
+                    background: selectedProject?.id === proj.id ? "rgba(255,255,255,0.3)" : "#667eea",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "6px",
+                    cursor: "pointer",
+                    fontSize: "12px",
+                    fontWeight: "600",
+                    width: "100%",
+                    transition: "all 0.3s ease"
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = selectedProject?.id === proj.id
+                      ? "rgba(255,255,255,0.4)"
+                      : "#5568d3";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = selectedProject?.id === proj.id
+                      ? "rgba(255,255,255,0.3)"
+                      : "#667eea";
+                  }}
+                >
+                  ✏️ Editar
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Upload GPS y Video */}
+      {selectedProject && (
+        <div style={{
+          background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+          padding: "30px",
+          borderRadius: "12px",
+          marginTop: "20px",
+          boxShadow: "0 8px 32px rgba(102, 126, 234, 0.2)",
+          color: "white"
+        }}>
+          <div style={{
+            background: "rgba(255,255,255,0.1)",
+            padding: "15px",
+            borderRadius: "8px",
+            marginBottom: "25px"
+          }}>
+            <h2 style={{ margin: "0 0 10px 0", fontSize: "28px", fontWeight: "600" }}>
+              📍 {selectedProject.name}
+            </h2>
+            <p style={{ margin: "0 0 8px 0", fontSize: "13px", opacity: 0.9 }}>
+              Proyecto #{selectedProject.id} • Creado: {new Date(selectedProject.createdAt).toLocaleDateString("es-ES")}
+            </p>
+            {projectInfo[selectedProject.id] && (
+              <div style={{
+                marginTop: "10px",
+                paddingTop: "10px",
+                borderTop: "1px solid rgba(255,255,255,0.2)",
+                fontSize: "12px",
+                color: "#c8e6c9"
+              }}>
+                <div>📍 {projectInfo[selectedProject.id].gpsCount} puntos GPS guardados</div>
+                <div>🎥 {projectInfo[selectedProject.id].hasVideo ? "Sí hay video guardado" : "Sin video guardado"}</div>
+                <div>👥 {(selectedUsers[selectedProject.id] || []).length} usuarios asignados</div>
+              </div>
+            )}
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginBottom: "30px" }}>
+            {/* GPS Section */}
+            <div style={{
+              background: "rgba(255,255,255,0.1)",
+              padding: "20px",
+              borderRadius: "10px",
+              backdrop: "blur(10px)",
+              border: "1px solid rgba(255,255,255,0.2)"
+            }}>
+              <label style={{ display: "block", marginBottom: "12px", fontWeight: "600", fontSize: "16px" }}>
+                📥 GPS (Proyecto #{selectedProject.id})
+              </label>
+              {projectInfo[selectedProject.id] && (
+                <div style={{
+                  background: projectInfo[selectedProject.id]?.gpsCount > 0 ? "rgba(76, 175, 80, 0.2)" : "rgba(255,255,255,0.1)",
+                  border: projectInfo[selectedProject.id]?.gpsCount > 0 ? "1px solid #4CAF50" : "1px solid rgba(255,255,255,0.3)",
+                  padding: "10px 12px",
+                  borderRadius: "6px",
+                  marginBottom: "12px",
+                  fontSize: "12px",
+                  color: projectInfo[selectedProject.id]?.gpsCount > 0 ? "#c8e6c9" : "rgba(255,255,255,0.7)"
+                }}>
+                  {projectInfo[selectedProject.id]?.gpsCount > 0
+                    ? `✓ ${projectInfo[selectedProject.id].gpsCount} puntos GPS guardados`
+                    : "📭 Sin puntos GPS guardados"}
+                </div>
+              )}
+              <p style={{ margin: "0 0 12px 0", fontSize: "12px", opacity: 0.9 }}>
+                Archivo JSON del ZIP - Solo para {selectedProject.name}
+              </p>
+              <input
+                key={`gps-input-${selectedProject.id}`}
+                type="file"
+                accept=".json"
+                onChange={(e) => {
+                  console.log(`✓ GPS seleccionado para proyecto #${selectedProject.id}: ${e.target.files?.[0]?.name}`);
+                  setGpsFile(prev => ({
+                    ...prev,
+                    [selectedProject.id]: e.target.files?.[0] || undefined
+                  }));
+                }}
+                style={{
+                  width: "100%",
+                  padding: "10px",
+                  marginBottom: "12px",
+                  borderRadius: "6px",
+                  border: "2px dashed rgba(255,255,255,0.5)",
+                  background: "rgba(255,255,255,0.05)",
+                  color: "white",
+                  cursor: "pointer"
+                }}
+              />
+              {gpsFile[selectedProject.id] && (
+                <div style={{
+                  padding: "10px",
+                  background: "#4CAF50",
+                  borderRadius: "6px",
+                  marginBottom: "12px",
+                  fontSize: "12px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  justifyContent: "space-between"
+                }}>
+                  <span>✓ {gpsFile[selectedProject.id].name}</span>
+                  <button
+                    onClick={() => {
+                      console.log(`✕ GPS borrado para proyecto #${selectedProject.id}`);
+                      setGpsFile(prev => {
+                        const newState = { ...prev };
+                        delete newState[selectedProject.id];
+                        return newState;
+                      });
+                    }}
+                    style={{
+                      background: "rgba(0,0,0,0.3)",
+                      border: "none",
+                      color: "white",
+                      cursor: "pointer",
+                      padding: "4px 8px",
+                      borderRadius: "4px",
+                      fontSize: "12px"
+                    }}
+                  >
+                    Limpiar
+                  </button>
+                </div>
+              )}
+              <button
+                onClick={uploadGPS}
+                disabled={loading || !gpsFile[selectedProject.id]}
+                style={{
+                  width: "100%",
+                  padding: "12px",
+                  background: gpsFile[selectedProject.id] ? "#4CAF50" : "#999",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "6px",
+                  cursor: gpsFile[selectedProject.id] ? "pointer" : "not-allowed",
+                  fontWeight: "600",
+                  fontSize: "14px",
+                  transition: "all 0.3s ease"
+                }}
+              >
+                {loading ? "⏳ Cargando..." : "Cargar GPS"}
+              </button>
+            </div>
+
+            {/* Video Section */}
+            <div style={{
+              background: "rgba(255,255,255,0.1)",
+              padding: "20px",
+              borderRadius: "10px",
+              backdrop: "blur(10px)",
+              border: "1px solid rgba(255,255,255,0.2)"
+            }}>
+              <label style={{ display: "block", marginBottom: "12px", fontWeight: "600", fontSize: "16px" }}>
+                🎥 Video (Proyecto #{selectedProject.id})
+              </label>
+              {projectInfo[selectedProject.id] && (
+                <div style={{
+                  background: projectInfo[selectedProject.id]?.hasVideo ? "rgba(33, 150, 243, 0.2)" : "rgba(255,255,255,0.1)",
+                  border: projectInfo[selectedProject.id]?.hasVideo ? "1px solid #2196F3" : "1px solid rgba(255,255,255,0.3)",
+                  padding: "10px 12px",
+                  borderRadius: "6px",
+                  marginBottom: "12px",
+                  fontSize: "12px",
+                  color: projectInfo[selectedProject.id]?.hasVideo ? "#81d4fa" : "rgba(255,255,255,0.7)"
+                }}>
+                  {projectInfo[selectedProject.id]?.hasVideo
+                    ? "✓ Video guardado"
+                    : "📭 Sin video guardado"}
+                </div>
+              )}
+              <p style={{ margin: "0 0 12px 0", fontSize: "12px", opacity: 0.9 }}>
+                Archivo de video (MP4, MOV, etc) - Solo para {selectedProject.name}
+              </p>
+              <input
+                key={`video-input-${selectedProject.id}`}
+                type="file"
+                accept="video/*"
+                onChange={(e) => {
+                  console.log(`✓ Video seleccionado para proyecto #${selectedProject.id}: ${e.target.files?.[0]?.name}`);
+                  setVideoFile(prev => ({
+                    ...prev,
+                    [selectedProject.id]: e.target.files?.[0] || undefined
+                  }));
+                }}
+                style={{
+                  width: "100%",
+                  padding: "10px",
+                  marginBottom: "12px",
+                  borderRadius: "6px",
+                  border: "2px dashed rgba(255,255,255,0.5)",
+                  background: "rgba(255,255,255,0.05)",
+                  color: "white",
+                  cursor: "pointer"
+                }}
+              />
+              {videoFile[selectedProject.id] && (
+                <div style={{
+                  padding: "10px",
+                  background: "#2196F3",
+                  borderRadius: "6px",
+                  marginBottom: "12px",
+                  fontSize: "12px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  justifyContent: "space-between"
+                }}>
+                  <span>✓ {videoFile[selectedProject.id].name}</span>
+                  <button
+                    onClick={() => {
+                      console.log(`✕ Video borrado para proyecto #${selectedProject.id}`);
+                      setVideoFile(prev => {
+                        const newState = { ...prev };
+                        delete newState[selectedProject.id];
+                        return newState;
+                      });
+                    }}
+                    style={{
+                      background: "rgba(0,0,0,0.3)",
+                      border: "none",
+                      color: "white",
+                      cursor: "pointer",
+                      padding: "4px 8px",
+                      borderRadius: "4px",
+                      fontSize: "12px"
+                    }}
+                  >
+                    Limpiar
+                  </button>
+                </div>
+              )}
+              <button
+                onClick={uploadVideo}
+                disabled={loading || !videoFile[selectedProject.id]}
+                style={{
+                  width: "100%",
+                  padding: "12px",
+                  background: videoFile[selectedProject.id] ? "#2196F3" : "#999",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "6px",
+                  cursor: videoFile[selectedProject.id] ? "pointer" : "not-allowed",
+                  fontWeight: "600",
+                  fontSize: "14px",
+                  transition: "all 0.3s ease"
+                }}
+              >
+                {loading ? "⏳ Cargando..." : "Cargar Video"}
+              </button>
+            </div>
+          </div>
+
+          {/* Editar acceso de usuarios */}
+          <div style={{
+            background: "rgba(255,255,255,0.1)",
+            padding: "20px",
+            borderRadius: "10px",
+            backdrop: "blur(10px)",
+            border: "1px solid rgba(255,255,255,0.2)"
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "15px" }}>
+              <h3 style={{ margin: "0", fontSize: "18px", fontWeight: "600" }}>
+                👥 Asignar Usuarios
+              </h3>
+              <button
+                onClick={async () => {
+                  if (window.confirm(`⚠️ ¿Eliminar el proyecto "${selectedProject.name}" y TODO su contenido (GPS, videos, frames, accesos)?\n\nEsta acción no se puede deshacer.`)) {
+                    setLoading(true);
+                    try {
+                      const res = await fetch(`${API_URL}/api/projects/${selectedProject.id}`, {
+                        method: "DELETE",
+                        headers: { Authorization: `Bearer ${token}` }
+                      });
+                      const data = await res.json();
+                      if (res.ok) {
+                        setMessage(`✓ ${data.message}`);
+                        // Refrescar lista de proyectos
+                        fetchProjects();
+                        setSelectedProject(null);
+                      } else {
+                        setMessage(`❌ Error: ${data.error}`);
+                      }
+                    } catch (e) {
+                      setMessage("❌ Error eliminando proyecto: " + e.message);
+                    } finally {
+                      setLoading(false);
+                    }
+                  }
+                }}
+                disabled={loading}
+                style={{
+                  padding: "8px 16px",
+                  background: "#f44336",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "6px",
+                  cursor: "pointer",
+                  fontWeight: "600",
+                  fontSize: "12px",
+                  transition: "all 0.3s ease"
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = "#da190b";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = "#f44336";
+                }}
+              >
+                🗑️ Eliminar Proyecto
+              </button>
+            </div>
+            {users.length > 0 ? (
+              <div>
+                <div style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+                  gap: "10px",
+                  marginBottom: "15px",
+                  background: "rgba(255,255,255,0.05)",
+                  padding: "15px",
+                  borderRadius: "8px"
+                }}>
+                  {users.map(user => {
+                    const projectUserIds = selectedUsers[selectedProject?.id] || [];
+                    const isSelected = projectUserIds.includes(user.id);
+                    if (projectUserIds.length > 0 && user.id === projectUserIds[0]) {
+                      console.log(`✓ Mostrando usuarios para proyecto #${selectedProject?.id}:`, projectUserIds);
+                    }
+                    return (
+                      <label
+                        key={user.id}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "10px",
+                          padding: "10px 12px",
+                          background: isSelected ? "rgba(76, 175, 80, 0.2)" : "rgba(255,255,255,0.08)",
+                          border: isSelected ? "2px solid #4CAF50" : "1px solid rgba(255,255,255,0.2)",
+                          borderRadius: "8px",
+                          cursor: "pointer",
+                          transition: "all 0.3s ease",
+                          fontSize: "14px"
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = isSelected
+                            ? "rgba(76, 175, 80, 0.3)"
+                            : "rgba(255,255,255,0.12)";
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = isSelected
+                            ? "rgba(76, 175, 80, 0.2)"
+                            : "rgba(255,255,255,0.08)";
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={(e) => {
+                            const current = selectedUsers[selectedProject?.id] || [];
+                            const newUsers = e.target.checked
+                              ? [...current, user.id]
+                              : current.filter(id => id !== user.id);
+                            setSelectedUsers(prev => ({
+                              ...prev,
+                              [selectedProject.id]: newUsers
+                            }));
+                          }}
+                          style={{
+                            width: "18px",
+                            height: "18px",
+                            cursor: "pointer",
+                            accentColor: "#4CAF50"
+                          }}
+                        />
+                        <div>
+                          <div style={{ fontWeight: "600" }}>{user.username}</div>
+                          <div style={{ fontSize: "12px", opacity: 0.8 }}>{user.company}</div>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+                <div style={{
+                  padding: "12px",
+                  background: "rgba(255,255,255,0.2)",
+                  borderRadius: "6px",
+                  marginBottom: "15px",
+                  fontSize: "13px",
+                  fontWeight: "600"
+                }}>
+                  ✓ {selectedUsers[selectedProject?.id]?.length || 0} usuario{selectedUsers[selectedProject?.id]?.length !== 1 ? "s" : ""} seleccionado{selectedUsers[selectedProject?.id]?.length !== 1 ? "s" : ""}
+                </div>
+                <button
+                  onClick={async () => {
+                    if (!selectedProject) {
+                      setMessage("❌ Selecciona un proyecto primero");
+                      return;
+                    }
+                    const projectId = selectedProject.id;
+                    const projectName = selectedProject.name;
+                    const currentUsers = selectedUsers[projectId] || [];
+
+                    console.log(`📍 Guardando para proyecto ${projectId} (${projectName}):`, currentUsers);
+
+                    setLoading(true);
+                    try {
+                      const res = await fetch(`${API_URL}/api/projects/${projectId}/access`, {
+                        method: "POST",
+                        headers: {
+                          "Content-Type": "application/json",
+                          Authorization: `Bearer ${token}`
+                        },
+                        body: JSON.stringify({ userIds: currentUsers })
+                      });
+                      const data = await res.json();
+                      console.log(`✓ Guardado exitoso para ${projectName}`);
+                      setSavedUsers(prev => ({
+                        ...prev,
+                        [projectId]: currentUsers
+                      }));
+                      setMessage(`✓ Acceso guardado en "${projectName}" para ${data.count} usuarios`);
+                    } catch (e) {
+                      console.error(`❌ Error guardando para ${projectName}:`, e);
+                      setMessage("❌ Error guardando acceso: " + e.message);
+                    } finally {
+                      setLoading(false);
+                    }
+                  }}
+                  disabled={loading || !selectedProject}
+                  style={{
+                    width: "100%",
+                    padding: "12px",
+                    background: "#4CAF50",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "6px",
+                    cursor: selectedProject ? "pointer" : "not-allowed",
+                    fontWeight: "600",
+                    fontSize: "14px",
+                    opacity: selectedProject ? 1 : 0.6,
+                    transition: "all 0.3s ease"
+                  }}
+                >
+                  ✓ Guardar Acceso
+                </button>
+              </div>
+            ) : (
+              <p style={{ color: "#ccc", margin: 0 }}>Sin usuarios disponibles</p>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
