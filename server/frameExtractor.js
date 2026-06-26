@@ -79,7 +79,13 @@ export async function extractFramesFromVideo(videoPath, gpsPoints, projectId) {
       // Verificar frames extraídos
       let files = fs.readdirSync(outputDir).filter(f => f.endsWith('.jpg')).sort();
 
-      console.log(`📹 Se extrajeron ${files.length} frames totales`);
+      console.log(`📹 Se extrajeron ${files.length} frames totales en ${outputDir}`);
+
+      if (files.length === 0) {
+        console.error(`❌ ERROR: No se extrajo ningún frame. Verificar FFmpeg y permisos.`);
+        console.error(`   Directorio: ${outputDir}`);
+        console.error(`   Archivos en directorio:`, fs.readdirSync(outputDir));
+      }
 
       // Asociar frames con puntos GPS filtrados uniformemente
       const frames = [];
