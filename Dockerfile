@@ -1,5 +1,8 @@
 FROM node:18-alpine
 
+# Instalar git y build tools necesarios
+RUN apk add --no-cache git build-base python3
+
 WORKDIR /app
 
 # Copiar todo
