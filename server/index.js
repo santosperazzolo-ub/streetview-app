@@ -4,10 +4,19 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
+import { execSync } from "child_process";
 import exifr from "exifr";
 import jwt from "jsonwebtoken";
 import db from "./db.js";
 import { extractFramesFromVideo } from "./frameExtractor.js";
+
+// Verificar si FFmpeg está disponible al iniciar
+try {
+  execSync('ffmpeg -version', { stdio: 'pipe' });
+  console.log('✓ FFmpeg disponible');
+} catch (e) {
+  console.error('❌ FFmpeg NO está disponible:', e.message);
+}
 
 // Inicializar BD con datos demo si está vacía
 const initDB = () => {
