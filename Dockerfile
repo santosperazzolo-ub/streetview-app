@@ -1,7 +1,7 @@
 FROM node:18-alpine
 
-# Instalar git y build tools necesarios
-RUN apk add --no-cache git build-base python3
+# Instalar git, build tools y FFmpeg
+RUN apk add --no-cache git build-base python3 ffmpeg
 
 WORKDIR /app
 
