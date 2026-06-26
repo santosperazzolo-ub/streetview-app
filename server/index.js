@@ -323,6 +323,11 @@ app.post("/api/projects/:projectId/video", verifyToken, isAdmin, upload.single("
       try {
         const frames = await extractFramesFromVideo(filepath, gpsPoints, projectId);
 
+        if (frames.length === 0) {
+          console.warn(`⚠️ No se extrajeron frames del video`);
+          return res.status(400).json({ error: "No se pudieron extraer frames del video" });
+        }
+
         // Guardar frames en la BD
         const insertStmt = db.prepare(
           "INSERT INTO project_frames (projectId, frameIndex, framePath, lat, lon, heading) VALUES (?, ?, ?, ?, ?, ?)"
@@ -339,8 +344,8 @@ app.post("/api/projects/:projectId/video", verifyToken, isAdmin, upload.single("
 
         res.json({ ok: true, videoUrl, framesExtracted: frames.length });
       } catch (frameError) {
-        console.error("Error extrayendo frames:", frameError.message);
-        res.json({ ok: true, videoUrl, framesExtracted: 0, frameError: frameError.message });
+        console.error("❌ Error extrayendo frames:", frameError.message);
+        res.status(500).json({ error: `Error extrayendo frames: ${frameError.message}` });
       }
     } else {
       res.json({ ok: true, videoUrl, framesExtracted: 0, message: "Sin puntos GPS para extraer frames" });
