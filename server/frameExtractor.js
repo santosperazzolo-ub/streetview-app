@@ -58,22 +58,22 @@ export async function extractFramesFromVideo(videoPath, gpsPoints, projectId) {
       }
 
       // Calcular FPS para extraer N frames
-      // Usamos fps=1 para extraer 1 frame por segundo, luego seleccionamos los que necesitamos
-      const cmd = `ffmpeg -i "${videoPath}" -vf fps=1 "${path.join(outputDir, 'frame_%04d.jpg')}" -y`;
+      // Optimizado para bajo uso de memoria: fps=0.5 (1 frame cada 2 segundos)
+      // -q:v 5 = calidad de JPEG (0-31, menor = mejor, pero más memoria)
+      // -c:v mjpeg = usar codec MJPEG para menor memoria
+      const cmd = `ffmpeg -i "${videoPath}" -vf fps=0.5,scale=640:-1 -q:v 8 -c:v mjpeg "${path.join(outputDir, 'frame_%04d.jpg')}" -y 2>&1`;
 
-      console.log(`⏳ Procesando con FFmpeg...`);
-      console.log(`Ejecutando: ${cmd}`);
+      console.log(`⏳ Procesando con FFmpeg (bajo memoria)...`);
+      console.log(`Extrayendo 1 frame cada 2 segundos, escala 640p`);
 
       try {
         execSync(cmd, {
           encoding: 'utf-8',
-          stdio: ['pipe', 'pipe', 'pipe']
+          shell: '/bin/sh'
         });
       } catch (execError) {
         console.error('Error ejecutando FFmpeg:', execError.message);
-        if (execError.stdout) console.error('STDOUT:', execError.stdout);
-        if (execError.stderr) console.error('STDERR:', execError.stderr);
-        throw execError;
+        throw new Error(`FFmpeg falló: ${execError.message.substring(0, 200)}`);
       }
 
       // Verificar frames extraídos
