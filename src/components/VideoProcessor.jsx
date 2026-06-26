@@ -79,7 +79,7 @@ async function uploadFramesToServer(projectId, panoramas, token) {
     formData.append("lon", frame.gpsPoint.lon);
     formData.append("heading", frame.gpsPoint.heading);
 
-    await fetch(`http://localhost:3001/api/projects/${projectId}/frames`, {
+    await fetch(`/api/projects/${projectId}/frames`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
       body: formData

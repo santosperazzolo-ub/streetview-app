@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
 
 export default function AdminPanel({ token }) {
-  // Detectar si estamos en ngrok - usar rutas relativas
-  const API_BASE = window.location.hostname.includes('ngrok') ? '' : 'http://localhost:3001';
+  // Usar URLs relativas siempre
+  const API_BASE = '';
     
   const [projects, setProjects] = useState([]);
   const [users, setUsers] = useState([]);

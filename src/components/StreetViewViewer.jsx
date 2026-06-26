@@ -24,7 +24,7 @@ export default function StreetViewViewer({ user, token }) {
   const fetchProjects = async () => {
     try {
       console.log('📦 Obteniendo proyectos...');
-      const res = await fetch("http://localhost:3001/api/projects", {
+      const res = await fetch("/api/projects", {
         headers: { Authorization: `Bearer ${token}` }
       });
       const data = await res.json();
@@ -48,7 +48,7 @@ export default function StreetViewViewer({ user, token }) {
     try {
       console.log('📍 Cargando frames para proyecto:', projectId);
       // Fetch frames (si existen) o GPS points
-      const framesRes = await fetch(`http://localhost:3001/api/projects/${projectId}/frames`, {
+      const framesRes = await fetch(`/api/projects/${projectId}/frames`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       const frames = await framesRes.json();
@@ -66,25 +66,25 @@ export default function StreetViewViewer({ user, token }) {
           lat: frame.lat,
           lon: frame.lon,
           heading: frame.heading || 0,
-          image: `http://localhost:3001${frame.framePath}`,
+          image: `${frame.framePath}`,
           video: false,
           links: i === 0 ? (filteredFrames.length > 1 ? [2] : []) : i === filteredFrames.length - 1 ? [i] : [i, i + 2]
         }));
       } else {
         // Fallback: usar puntos GPS
-        const gpsRes = await fetch(`http://localhost:3001/api/projects/${projectId}/gps`, {
+        const gpsRes = await fetch(`/api/projects/${projectId}/gps`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         const gpsData = await gpsRes.json();
 
         // Fetch video como fallback
-        const videoRes = await fetch(`http://localhost:3001/api/projects/${projectId}/video`, {
+        const videoRes = await fetch(`/api/projects/${projectId}/video`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         const videoData = await videoRes.json();
 
         const videoUrl = videoData.videoPath
-          ? `http://localhost:3001${videoData.videoPath}`
+          ? `${videoData.videoPath}`
           : "/video.MP4";
 
         // Filtrar GPS points por distancia (3 metros)
