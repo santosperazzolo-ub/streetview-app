@@ -7,7 +7,8 @@
     "node": ">=18.0.0"
   },
   "scripts": {
-    "start": "vite build && node server/index.js",
+    "build": "vite build",
+    "start": "node server/index.js",
     "dev": "node --watch server/index.js"
   },
   "dependencies": {

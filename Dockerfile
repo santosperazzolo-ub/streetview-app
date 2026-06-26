@@ -8,6 +8,9 @@ COPY . .
 # Install dependencies from root
 RUN npm install
 
+# Build frontend with Vite
+RUN npm run build
+
 # Install server dependencies
 RUN cd server && npm install && cd ..
 
