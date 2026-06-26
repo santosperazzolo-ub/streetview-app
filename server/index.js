@@ -9,6 +9,22 @@ import jwt from "jsonwebtoken";
 import db from "./db.js";
 import { extractFramesFromVideo } from "./frameExtractor.js";
 
+// Inicializar BD con datos demo si está vacía
+const initDB = () => {
+  const users = db.prepare("SELECT COUNT(*) as count FROM users").get();
+  if (users.count === 0) {
+    const demoUsers = [
+      { username: 'admin', password: 'santos', role: 'admin', company: 'Main' },
+      { username: 'chubut', password: '123', role: 'user', company: 'Chubut' },
+      { username: 'zarate', password: '123', role: 'user', company: 'Zárate' }
+    ];
+    const stmt = db.prepare('INSERT INTO users (username, password, role, company) VALUES (?, ?, ?, ?)');
+    demoUsers.forEach(u => stmt.run(u.username, u.password, u.role, u.company));
+    console.log('✓ BD inicializada con usuarios demo');
+  }
+};
+initDB();
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = process.env.PORT || 3001;
