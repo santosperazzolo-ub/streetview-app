@@ -324,44 +324,41 @@ app.post("/api/projects/:projectId/video", verifyToken, isAdmin, upload.single("
     const stmt = db.prepare("INSERT INTO project_videos (projectId, videoPath) VALUES (?, ?)");
     stmt.run(projectId, videoUrl);
 
-    // Responder inmediatamente sin esperar a FFmpeg
-    res.json({ ok: true, videoUrl, message: "Video subido. Extrayendo frames en background..." });
-
-    // Automáticamente extraer frames en BACKGROUND si hay puntos GPS
+    // Automáticamente extraer frames SINCRONICAMENTE si hay puntos GPS
     const gpsPoints = db.prepare("SELECT * FROM gps_points WHERE projectId = ? ORDER BY timestamp ASC").all(projectId);
 
     if (gpsPoints.length > 0) {
-      console.log(`🎬 Iniciando extracción de frames en background para proyecto ${projectId}...`);
+      console.log(`🎬 Extrayendo frames para proyecto ${projectId}...`);
+      try {
+        const frames = await extractFramesFromVideo(filepath, gpsPoints, projectId);
 
-      // Ejecutar en background SIN esperar
-      (async () => {
-        try {
-          const frames = await extractFramesFromVideo(filepath, gpsPoints, projectId);
-
-          if (frames.length === 0) {
-            console.warn(`⚠️ No se extrajeron frames del video para proyecto ${projectId}`);
-            return;
-          }
-
-          // Guardar frames en la BD
-          const insertStmt = db.prepare(
-            "INSERT INTO project_frames (projectId, frameIndex, framePath, lat, lon, heading) VALUES (?, ?, ?, ?, ?, ?)"
-          );
-
-          const insertMany = db.transaction((frames) => {
-            for (const frame of frames) {
-              insertStmt.run(projectId, frame.index, frame.framePath, frame.lat, frame.lon, frame.heading);
-            }
-          });
-
-          insertMany(frames);
-          console.log(`✓ ${frames.length} frames guardados en BD para proyecto ${projectId}`);
-        } catch (frameError) {
-          console.error(`❌ Error extrayendo frames para proyecto ${projectId}:`, frameError.message);
+        if (frames.length === 0) {
+          console.warn(`⚠️ No se extrajeron frames del video para proyecto ${projectId}`);
+          return res.json({ ok: true, videoUrl, framesExtracted: 0, message: "Video subido pero sin frames extraídos" });
         }
-      })();
+
+        // Guardar frames en la BD
+        const insertStmt = db.prepare(
+          "INSERT INTO project_frames (projectId, frameIndex, framePath, lat, lon, heading) VALUES (?, ?, ?, ?, ?, ?)"
+        );
+
+        const insertMany = db.transaction((frames) => {
+          for (const frame of frames) {
+            insertStmt.run(projectId, frame.index, frame.framePath, frame.lat, frame.lon, frame.heading);
+          }
+        });
+
+        insertMany(frames);
+        console.log(`✓ ${frames.length} frames guardados en BD para proyecto ${projectId}`);
+
+        res.json({ ok: true, videoUrl, framesExtracted: frames.length, message: `${frames.length} frames extraídos` });
+      } catch (frameError) {
+        console.error(`❌ Error extrayendo frames para proyecto ${projectId}:`, frameError.message);
+        res.json({ ok: true, videoUrl, framesExtracted: 0, frameError: frameError.message });
+      }
     } else {
       console.log(`⚠️ Proyecto ${projectId} sin puntos GPS para extraer frames`);
+      res.json({ ok: true, videoUrl, framesExtracted: 0, message: "Sin puntos GPS para extraer frames" });
     }
   } catch (e) {
     res.status(400).json({ error: e.message });
