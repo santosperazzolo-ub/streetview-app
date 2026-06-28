@@ -23,7 +23,6 @@
     "react-leaflet": "4.2.1",
     "leaflet": "1.9.4",
     "axios": "1.6.2",
-    "react-viewer": "3.2.2",
   },
   "devDependencies": {
     "vite": "5.0.8",
